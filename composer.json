@@ -1,0 +1,12 @@
+{
+    "name": "cvo-technologies/croogo-nodes-datasource-plugin",
+    "require": {
+        "croogo/croogo": "2.1.0"
+    },
+    "authors": [
+        {
+            "name": "Marlin Cremers",
+            "email": "m.cremers@cvo-technologies.com"
+        }
+    ]
+}
