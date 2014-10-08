@@ -11,6 +11,7 @@ class CroogoNodesSource extends DataSource {
 		parent::__construct($config);
 
 		$this->Node = ClassRegistry::init('Nodes.Node');
+		$this->TypeField = ClassRegistry::init('CustomFields.TypeField');
 
 		$this->columns = $this->Node->getDataSource()->columns;
 	}
@@ -23,12 +24,20 @@ class CroogoNodesSource extends DataSource {
 		$schema = $this->Node->schema();
 		unset($schema['type']);
 
+		$endData = array_splice($schema, 7);
+
 		$metaFields = $this->Node->Meta->find('list', array(
 			'fields'     => array($this->Node->Meta->alias . '.key'),
 			'conditions' => array(
 				'Node.type' => Inflector::singularize($model->table)
 			),
 			'recursive'  => 0
+		));
+
+		$customFields = $this->TypeField->find('all', array(
+			'conditions' => array(
+				$this->TypeField->alias . '.type_alias' => Inflector::singularize($model->table)
+			)
 		));
 
 		foreach ($metaFields as $field) {
@@ -43,6 +52,20 @@ class CroogoNodesSource extends DataSource {
 			);
 		}
 
+		foreach ($customFields as $field) {
+			$schema[$field['TypeField']['name']] = array(
+				'type' => $field['TypeField']['type'],
+				'null' => !$field['TypeField']['required'],
+				'default' => $field['TypeField']['default'],
+				'length' => null,
+				'collate' => 'utf8_unicode_ci',
+				'charset' => 'utf8',
+				'custom'  => true,
+			);
+		}
+
+		$schema += $endData;
+
 		return $schema;
 	}
 
@@ -53,6 +76,10 @@ class CroogoNodesSource extends DataSource {
 	public function read(Model $Model, $queryData = array(), $recursive = null) {
 		$queryType = 'all';
 		$query = array();
+
+		if (!isset($queryData['recursive'])) {
+			$queryData['recursive'] = $Model->recursive;
+		}
 
 		$query['conditions'] = $this->__rebuildConditions($Model, $queryData['conditions']);
 		$query['conditions'][$this->Node->alias . '.type'] = Inflector::singularize($Model->table);
@@ -70,7 +97,13 @@ class CroogoNodesSource extends DataSource {
 
 		if (is_array($queryData['fields'])) {
 			foreach ($queryData['fields'] as $field) {
-				list ($field, $model) = array_reverse(explode('.', $field));
+				if (!$field) {
+					continue;
+				}
+
+				if (strstr($field, '.')) {
+					list ($field, $model) = array_reverse(explode('.', $field));
+				}
 				$query['fields'][] = $this->Node->alias . '.' . $field;
 			}
 		} else {
@@ -81,6 +114,9 @@ class CroogoNodesSource extends DataSource {
 
 		if ($queryData['limit']) {
 			$query['limit'] = $queryData['limit'];
+		}
+		if ($queryData['offset']) {
+			$query['offset'] = $queryData['offset'];
 		}
 
 //		debug($query);
@@ -121,6 +157,7 @@ class CroogoNodesSource extends DataSource {
 				$modelEntry[$relation] = $node[$relation];
 			}
 
+
 			if (isset($modelEntry['Meta'])) {
 				foreach ($modelEntry['Meta'] as $meta) {
 					$modelEntry[$Model->alias][$meta['key']] = $meta['value'];
@@ -130,7 +167,16 @@ class CroogoNodesSource extends DataSource {
 			$modelData[] = $modelEntry;
 		}
 
-//		debug($modelData);
+		if ($queryData['recursive'] > -1) {
+			foreach ($Model->_associations as $type) {
+				foreach ($Model->{$type} as $assoc => $assocData) {
+					$LinkModel = $Model->{$assoc};
+
+					$stack = array($assoc);
+					$this->queryAssociation($Model, $LinkModel, $type, $assoc, $assocData, $queryData, true, $modelData, $queryData['recursive'] - 1, $stack);
+				}
+			}
+		}
 
 		return $modelData;
 	}
@@ -199,6 +245,80 @@ class CroogoNodesSource extends DataSource {
 		return $data;
 	}
 
+	public function queryAssociation(Model $model, &$linkModel, $type, $association, $assocData, &$queryData, $external = false, &$resultSet, $recursive, $stack) {
+		if (!$association) {
+			return;
+		}
+		if (!$resultSet) {
+			return;
+		}
+
+		$assocData = array_merge(array('conditions' => null, 'fields' => null, 'order' => null), $assocData);
+		if (isset($queryData['fields'])) {
+			$assocData['fields'] = array_merge((array)$queryData['fields'], (array)$assocData['fields']);
+		}
+		foreach ($resultSet as $id => $result) {
+			if (!array_key_exists($model->alias, $result)) {
+				continue;
+			}
+			if ($type === 'belongsTo' && array_key_exists($assocData['foreignKey'], $result[$model->alias])) {
+//				debug( array_merge((array)$assocData['conditions'], array($model->{$association}->primaryKey => $result[$model->alias][$assocData['foreignKey']])));exit();
+				$find = $model->{$association}->find('first', array(
+					'conditions' => array_merge((array)$assocData['conditions'], array($association . '.' . $model->{$association}->primaryKey => $result[$model->alias][$assocData['foreignKey']])),
+					'fields' => $assocData['fields'],
+					'order' => $assocData['order'],
+					'recursive' => $recursive
+				));
+			} elseif (in_array($type, array('hasOne', 'hasMany')) && array_key_exists($model->primaryKey, $result[$model->alias])) {
+				if ($type === 'hasOne') {
+					$find = $model->{$association}->find('first', array(
+						'conditions' => array_merge((array)$assocData['conditions'], array($association . '.' . $assocData['foreignKey'] => $result[$model->alias][$model->primaryKey])),
+						'fields' => $assocData['fields'],
+						'order' => $assocData['order'],
+						'recursive' => $recursive
+					));
+				} else {
+					$find = $model->{$association}->find('all', array(
+						'conditions' => array_merge((array)$assocData['conditions'], array($association . '.' . $assocData['foreignKey'] => $result[$model->alias][$model->primaryKey])),
+						'fields' => $assocData['fields'],
+						'order' => $assocData['order'],
+						'recursive' => $recursive
+					));
+					$find = array(
+						$association => (array)Set::extract('{n}.' . $association, $find)
+					);
+				}
+			} elseif ($type === 'hasAndBelongsToMany' && array_key_exists($model->primaryKey, $result[$model->alias])) {
+				$find = array();
+				$hABTMModel = ClassRegistry::init($assocData['with']);
+				$ids = $hABTMModel->find('all', array(
+					'fields' => array(
+						$assocData['with'] . '.' . $assocData['associationForeignKey']
+					),
+					'conditions' => array(
+						$assocData['with'] . '.' . $assocData['foreignKey'] => $result[$model->alias][$model->primaryKey]
+					)
+				));
+				if ($ids) {
+					$ids = Set::extract('{n}.' . $assocData['with'] . '.' . $assocData['associationForeignKey'], $ids);
+					$find = $model->{$association}->find('all', array(
+						'conditions' => array_merge((array)$assocData['conditions'], array($association . '.' . $linkModel->primaryKey => $ids)),
+						'fields' => $assocData['fields'],
+						'order' => $assocData['order'],
+						'recursive' => $recursive
+					));
+					$find = array(
+						$association => (array)Set::extract('{n}.' . $association, $find)
+					);
+				}
+			}
+			if (empty($find)) {
+				$find = array($association => array());
+			}
+			$resultSet[$id] = array_merge($find, $resultSet[$id]);
+		}
+	}
+
 
 	private function __moveCustomToCustomFields(Model $Model, $data) {
 		$schema = $this->describe($Model);
@@ -213,17 +333,22 @@ class CroogoNodesSource extends DataSource {
 					continue;
 				}
 
-				$metaFieldData = $this->Node->Meta->find('list', array(
-					'conditions' => array(
-						$this->Node->Meta->alias . '.model'       => $this->Node->alias,
-						$this->Node->Meta->alias . '.foreign_key' => $data['Node']['id'],
-						$this->Node->Meta->alias . '.key'         => $key,
-					)
-				));
+				if (isset($data['Node']['id'])) {
+					$metaFieldData = $this->Node->Meta->find('list', array(
+						'conditions' => array(
+							$this->Node->Meta->alias . '.model'       => $this->Node->alias,
+							$this->Node->Meta->alias . '.foreign_key' => $data['Node']['id'],
+							$this->Node->Meta->alias . '.key'         => $key,
+						)
+					));
+				} else {
+					$metaFieldData = array();
+				}
+
 
 				$metaData = array(
 					'model'       => $this->Node->alias,
-					'foreign_key' => $data['Node']['id'],
+//					'foreign_key' => $data['Node']['id'],
 					'key'         => $key,
 					'value'       => $value,
 					'weight'      => null,
