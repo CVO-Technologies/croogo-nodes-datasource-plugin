@@ -2,7 +2,7 @@
 	"name": "cvo-technologies/croogo-nodes-datasource-plugin",
 	"type": "croogo-plugin",
 	"require": {
-		"croogo/croogo": "2.1.0",
+		"croogo/croogo": "*",
 		"composer/installers": "*"
 	},
 	"authors": [
