@@ -112,20 +112,16 @@ class CroogoNodesSource extends DataSource {
 			}
 		}
 
-		if ($queryData['limit']) {
-			$query['limit'] = $queryData['limit'];
-		}
-		if ($queryData['offset']) {
-			$query['offset'] = $queryData['offset'];
-		}
+//		if ($queryData['limit']) {
+//			$query['limit'] = $queryData['limit'];
+//		}
+//		if ($queryData['offset']) {
+//			$query['offset'] = $queryData['offset'];
+//		}
 
 //		debug($query);
-		$nodes = $this->Node->find($queryType, $query);
+		$nodes = $this->Node->find('all', $query);
 //		debug($nodes);
-
-		if ($queryData['fields'] === 'COUNT') {
-			return array(array(array('count' => $nodes)));
-		}
 
 		$fields = array_keys($this->describe($Model));
 
@@ -165,6 +161,16 @@ class CroogoNodesSource extends DataSource {
 			}
 
 			$modelData[] = $modelEntry;
+		}
+
+		$modelData = $this->__filterLocal($Model, $queryData['conditions'], $modelData);
+
+		if (isset($queryData['limit'])) {
+			$modelData = array_slice($modelData, (isset($queryData['offset'])) ? $queryData['offset'] : 0, $queryData['limit']);
+		}
+
+		if ($queryData['fields'] === 'COUNT') {
+			return array(array(array('count' => $modelData)));
 		}
 
 		if ($queryData['recursive'] > -1) {
@@ -257,12 +263,15 @@ class CroogoNodesSource extends DataSource {
 		if (isset($queryData['fields'])) {
 			$assocData['fields'] = array_merge((array)$queryData['fields'], (array)$assocData['fields']);
 		}
+
 		foreach ($resultSet as $id => $result) {
-			if (!array_key_exists($model->alias, $result)) {
+//			debug($result);
+			if ((!is_array($result)) || (!array_key_exists($model->alias, $result))) {
 				continue;
 			}
 			if ($type === 'belongsTo' && array_key_exists($assocData['foreignKey'], $result[$model->alias])) {
 //				debug( array_merge((array)$assocData['conditions'], array($model->{$association}->primaryKey => $result[$model->alias][$assocData['foreignKey']])));exit();
+
 				$find = $model->{$association}->find('first', array(
 					'conditions' => array_merge((array)$assocData['conditions'], array($association . '.' . $model->{$association}->primaryKey => $result[$model->alias][$assocData['foreignKey']])),
 					'fields' => $assocData['fields'],
@@ -374,23 +383,96 @@ class CroogoNodesSource extends DataSource {
 
 			if (strstr($field, ' ')) {
 				$fieldParts = explode(' ', $field);
-				if ($Model->hasField($fieldParts[0])) {
+				if ($this->Node->hasField($fieldParts[0])) {
 					$queryConditions[$this->Node->alias . '.' . $fieldParts[0] . ' ' . $fieldParts[1]] = $condition;
 				}
 			} else {
-				if ($Model->hasField($field)) {
+				if ($this->Node->hasField($field)) {
 					$queryConditions[$this->Node->alias . '.' . $field] = $condition;
 				} else {
 					if (is_array($condition)) {
 						$queryConditions[$field] = $this->__rebuildConditions($Model, $condition);
 					} else {
-						$queryConditions[$field] = $condition;
+//						debug($field);
+//						debug($condition);
+//						$queryConditions[$field] = $condition;
 					}
 				}
 			}
 		}
 
 		return $queryConditions;
+	}
+
+	private function __filterLocal(Model $Model, $conditions, $modelData) {
+		if (!is_array($conditions)) {
+			return $modelData;
+		}
+
+		$filters = array();
+
+		$queryConditions = array();
+		foreach ($conditions as $field => $condition) {
+			list ($field, $model) = array_reverse(explode('.', 'no-model.' . $field));
+
+			if (strstr($field, ' ')) {
+				$fieldParts = explode(' ', $field);
+				if ($this->Node->hasField($fieldParts[0])) {
+					//$queryConditions[$this->Node->alias . '.' . $fieldParts[0] . ' ' . $fieldParts[1]] = $condition;
+				}
+			} else {
+				if ($this->Node->hasField($field)) {
+					//$queryConditions[$this->Node->alias . '.' . $field] = $condition;
+				} else {
+					if (is_array($condition)) {
+						//$queryConditions[$field] = $this->__rebuildConditions($Model, $condition);
+					} else {
+						$filters[$Model->alias . '.' . $field] = $condition;
+					}
+				}
+			}
+		}
+
+//		debug($filters);
+
+		$acceptedEntries = array();
+
+		foreach ($modelData as $modelEntry) {
+			$accepted = true;
+
+//			debug($modelEntry);
+
+			foreach ($filters as $path => $value) {
+				if (Hash::get($modelEntry, $path) != $value) {
+					$accepted = false;
+
+					CakeLog::write(
+						LOG_DEBUG,
+						__d(
+							'nodes_datasource',
+							'Ignoring node backed model entry %1$s because %2$s is equal to %3$s but is supposed to be %4$s',
+							$Model->alias,
+							$path,
+							Hash::get($modelEntry, $path),
+							$value
+						),
+						array('orders', 'webshop')
+					);
+
+					break;
+				}
+			}
+
+			if (!$accepted) {
+				continue;
+			}
+
+			$acceptedEntries[] = $modelEntry;
+		}
+
+//		debug($acceptedEntries);
+
+		return $acceptedEntries;
 	}
 
 }
