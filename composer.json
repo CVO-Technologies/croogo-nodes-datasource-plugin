@@ -3,7 +3,8 @@
 	"type": "croogo-plugin",
 	"require": {
 		"croogo/croogo": "*",
-		"composer/installers": "*"
+		"composer/installers": "*",
+		"cvo-technologies/custom-fields": "dev-master"
 	},
 	"authors": [
 		{
