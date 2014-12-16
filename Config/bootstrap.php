@@ -2,6 +2,6 @@
 
 App::uses('ConnectionManager', 'Model');
 
-//ConnectionManager::create('dffsaf', array(
-//	'datasource' => 'NodesDatasource.CroogoNodesSource'
-//));
+ConnectionManager::create('nodes', array(
+	'datasource' => 'NodesDatasource.CroogoNodesSource'
+));
