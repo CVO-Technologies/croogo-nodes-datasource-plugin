@@ -1,8 +1,10 @@
 {
 	"name": "cvo-technologies/croogo-nodes-datasource-plugin",
 	"type": "croogo-plugin",
+    "description": "A way to have models that use the nodes as source",
+    "license": "MIT",
 	"require": {
-		"croogo/croogo": "*",
+		"croogo/nodes": "dev-master",
 		"composer/installers": "*",
 		"cvo-technologies/custom-fields": "dev-master"
 	},
@@ -12,6 +14,16 @@
 		"email": "m.cremers@cvo-technologies.com"
 		}
 	],
+    "autoload": {
+        "psr-4": {
+            "NodesDatasource\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "NodesDatasource\\Test\\": "tests"
+        }
+    },
 	"extra": {
 		"installer-name": "NodesDatasource"
 	}
