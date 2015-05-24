@@ -1,6 +1,6 @@
 {
 	"name": "cvo-technologies/croogo-nodes-datasource-plugin",
-	"type": "croogo-plugin",
+	"type": "cakephp-plugin",
     "description": "A way to have models that use the nodes as source",
     "license": "MIT",
 	"require": {
