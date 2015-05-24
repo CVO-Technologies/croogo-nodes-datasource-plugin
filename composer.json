@@ -23,8 +23,5 @@
         "psr-4": {
             "NodesDatasource\\Test\\": "tests"
         }
-    },
-	"extra": {
-		"installer-name": "NodesDatasource"
-	}
+    }
 }
