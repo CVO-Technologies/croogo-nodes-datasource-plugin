@@ -4,7 +4,7 @@
     "description": "A way to have models that use the nodes as source",
     "license": "MIT",
 	"require": {
-		"croogo/nodes": "dev-master",
+		"croogo/nodes": "3.0.*@dev",
 		"composer/installers": "*",
 		"cvo-technologies/custom-fields": "dev-master"
 	},
