@@ -4,9 +4,8 @@
     "description": "A way to have models that use the nodes as source",
     "license": "MIT",
 	"require": {
-		"croogo/nodes": "3.0.*@dev",
-		"composer/installers": "*",
-		"cvo-technologies/custom-fields": "dev-master"
+		"croogo/nodes": "3.*@dev",
+		"cvo-technologies/custom-fields": "3.*@dev"
 	},
 	"authors": [
 		{
@@ -23,5 +22,6 @@
         "psr-4": {
             "NodesDatasource\\Test\\": "tests"
         }
-    }
+    },
+    "minimum-stability": "dev"
 }
